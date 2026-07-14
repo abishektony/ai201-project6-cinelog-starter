@@ -232,5 +232,84 @@ Watchlists display in reverse chronological order, matching the collection servi
 8. **Run test suite:**
    ```bash
    pytest tests/ -v
-   # All tests should pass (4 collection + 1 watchlist = 5 total)
+   # All tests should pass (4 collection + 6 watchlist = 10 total)
    ```
+
+---
+
+## Stretch Features
+
+### Stretch 1: Test Coverage for remove_from_watchlist()
+
+**What I implemented:**
+Added two comprehensive tests for the `remove_from_watchlist()` function in [tests/test_watchlist.py:71-104](tests/test_watchlist.py#L71-L104):
+
+1. **test_remove_from_watchlist_success** - Verifies the happy path:
+   - Adds a film to the watchlist
+   - Removes it successfully
+   - Confirms the entry no longer exists in the database
+
+2. **test_remove_from_watchlist_not_in_list_raises** - Verifies error handling:
+   - Attempts to remove a film that's not in the watchlist
+   - Confirms `NotInWatchlistError` is raised (not a database error or silent failure)
+
+**Why these tests matter:**
+The removal functionality was already implemented but untested. These tests ensure that:
+- The function correctly deletes entries from the database
+- It raises appropriate exceptions rather than causing database errors
+- It follows the same error-handling pattern as the collection service
+
+### Stretch 2: Additional Edge Case Test - Duplicate Prevention
+
+**What I implemented:**
+Added `test_add_to_watchlist_duplicate_raises` in [tests/test_watchlist.py:109-129](tests/test_watchlist.py#L109-L129).
+
+**Why I chose this edge case:**
+While the deduplication logic was already implemented and documented as Comment 2, it wasn't actually tested in the original test suite. This test:
+- Verifies the deduplication check raises `AlreadyInWatchlistError`
+- Confirms only one database entry exists after the duplicate attempt
+- Prevents regressions if the deduplication logic is accidentally removed
+
+This mirrors `test_add_to_collection_duplicate_raises` from the collection tests, maintaining pattern consistency across the codebase. Testing deduplication is critical because:
+- Database bloat: Without this check, users could create unlimited duplicate entries
+- User experience: Silent duplicates would be confusing in the UI
+- Data integrity: Violates the business rule that a film appears once per user's watchlist
+
+### Stretch 3: Visibility Toggle Parameter
+
+**What I implemented:**
+
+1. **Service layer** ([services/watchlist_service.py:26](services/watchlist_service.py#L26)):
+   - Added `public` parameter to `add_to_watchlist()` with default value `True`
+   - Updated docstring to document the new parameter
+   - Parameter is passed to `WatchlistEntry` constructor
+
+2. **Route layer** ([routes/watchlist/watchlist.py:31-54](routes/watchlist/watchlist.py#L31-L54)):
+   - Updated endpoint to accept optional `public` field in request body
+   - Uses `data.get("public", True)` to default to `True` if not provided
+   - Updated docstring to reflect new API contract: `{ "film_id": "<uuid>", "public": <bool> }`
+
+3. **Test coverage**:
+   - `test_add_to_watchlist_with_public_false` - Verifies explicit `public=False` works
+   - `test_add_to_watchlist_defaults_to_public` - Verifies default behavior is preserved
+
+**Why this change matters:**
+Previously, users could only create public watchlist entries and would need a separate update endpoint to change visibility. This enhancement:
+- **Reduces friction**: Users can set visibility at creation time rather than requiring a two-step process
+- **Maintains backward compatibility**: Omitting the parameter still defaults to `public=True`, so existing API clients aren't broken
+- **Improves privacy control**: Privacy-conscious users can now create private entries immediately
+
+**Design decision:**
+I kept the default as `public=True` to maintain consistency with Comment 4's design decision (optimizing for social discovery). Users who want privacy must explicitly opt in by passing `"public": false` in the request body.
+
+**Testing:**
+All 10 tests now pass (4 collection + 6 watchlist):
+```bash
+pytest tests/ -v
+# ✓ test_add_to_watchlist_nonexistent_film_raises
+# ✓ test_remove_from_watchlist_success
+# ✓ test_remove_from_watchlist_not_in_list_raises
+# ✓ test_add_to_watchlist_duplicate_raises
+# ✓ test_add_to_watchlist_with_public_false
+# ✓ test_add_to_watchlist_defaults_to_public
+```

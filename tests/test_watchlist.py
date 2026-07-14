@@ -64,3 +64,101 @@ def test_add_to_watchlist_nonexistent_film_raises(app, sample_user):
 
         with pytest.raises(FilmNotFoundError):
             add_to_watchlist(user_id=sample_user, film_id=fake_film_id)
+
+
+# ── Remove from watchlist ────────────────────────────────────────────────
+
+def test_remove_from_watchlist_success(app, sample_user, sample_film):
+    """
+    Removing a film that exists in the watchlist should succeed
+    and return True.
+    """
+    with app.app_context():
+        # First add the film to the watchlist
+        add_to_watchlist(user_id=sample_user, film_id=sample_film)
+
+        # Verify it was added
+        entry = WatchlistEntry.query.filter_by(
+            user_id=sample_user, film_id=sample_film
+        ).first()
+        assert entry is not None
+
+        # Now remove it
+        result = remove_from_watchlist(user_id=sample_user, film_id=sample_film)
+        assert result is True
+
+        # Verify it was removed
+        entry = WatchlistEntry.query.filter_by(
+            user_id=sample_user, film_id=sample_film
+        ).first()
+        assert entry is None
+
+
+def test_remove_from_watchlist_not_in_list_raises(app, sample_user, sample_film):
+    """
+    Attempting to remove a film that's not in the watchlist should raise
+    NotInWatchlistError, not silently succeed or cause a database error.
+    """
+    with app.app_context():
+        with pytest.raises(NotInWatchlistError):
+            remove_from_watchlist(user_id=sample_user, film_id=sample_film)
+
+
+# ── Deduplication ────────────────────────────────────────────────────────
+
+def test_add_to_watchlist_duplicate_raises(app, sample_user, sample_film):
+    """
+    Adding the same film twice to the watchlist should raise
+    AlreadyInWatchlistError, not silently create a duplicate entry.
+
+    This ensures the deduplication logic works correctly and prevents
+    database bloat from duplicate entries.
+    """
+    with app.app_context():
+        # Add the film once
+        add_to_watchlist(user_id=sample_user, film_id=sample_film)
+
+        # Try to add it again - should raise
+        with pytest.raises(AlreadyInWatchlistError):
+            add_to_watchlist(user_id=sample_user, film_id=sample_film)
+
+        # Verify only one entry exists
+        count = WatchlistEntry.query.filter_by(
+            user_id=sample_user, film_id=sample_film
+        ).count()
+        assert count == 1
+
+
+# ── Visibility control ───────────────────────────────────────────────────
+
+def test_add_to_watchlist_with_public_false(app, sample_user, sample_film):
+    """
+    Adding a film with public=False should create a private watchlist entry.
+    This allows users to explicitly control visibility when adding films.
+    """
+    with app.app_context():
+        entry = add_to_watchlist(
+            user_id=sample_user, film_id=sample_film, public=False
+        )
+
+        assert entry is not None
+        assert entry.public is False
+
+        # Verify it persisted with the correct visibility
+        in_db = WatchlistEntry.query.filter_by(
+            user_id=sample_user, film_id=sample_film
+        ).first()
+        assert in_db is not None
+        assert in_db.public is False
+
+
+def test_add_to_watchlist_defaults_to_public(app, sample_user, sample_film):
+    """
+    Adding a film without specifying public parameter should default to
+    public=True, matching the model default.
+    """
+    with app.app_context():
+        entry = add_to_watchlist(user_id=sample_user, film_id=sample_film)
+
+        assert entry is not None
+        assert entry.public is True
