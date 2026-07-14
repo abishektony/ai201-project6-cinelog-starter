@@ -132,11 +132,7 @@ The watchlist feature was developed *after* the UUID refactor was already merged
 
 Final commit history after interactive rebase (3 commits, no merge commits):
 
-```
-f46b8b3 docs: add pr-response.md with design decisions
-9fc2c0f test: add test for nonexistent film_id in add_to_watchlist
-f8d4149 feat: add watchlist feature with add_to_watchlist service
-```
+![alt text](image.png)
 
 All commits follow conventional commit format (feat:, test:, docs:) and represent logical changes. The three documentation updates (Comments 1-6) were squashed into a single docs commit to keep the history clean.
 
